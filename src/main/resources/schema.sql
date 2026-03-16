@@ -1,0 +1,6 @@
+CREATE TABLE TRANSACTIONS(
+id BIGINT AUTO_INCREMENT PRIMARY KEY, 
+customerId BIGINT, 
+amount DOUBLE, 
+transactionDate DATE 
+);
