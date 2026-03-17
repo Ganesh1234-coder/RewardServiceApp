@@ -3,7 +3,7 @@
 
 A Spring Boot service that calculates **monthly and total reward points** for customers based on their transaction history.
 
-## 📌 Problem Statement
+## Problem Statement
 
 - **2 points** for every whole dollar spent **over $100** in each transaction
 - **1 point** for every whole dollar spent **between $50 and $100** in each transaction
@@ -15,7 +15,7 @@ The API returns a **3-month rolling window** (anchored to today) with **chronolo
 
 ---
 
-## 🧮 Reward Calculation
+## Reward Calculation
 
 Implemented in `CalculateRewardsPoints.calculatePoints(Double amount)`:
 
@@ -29,7 +29,7 @@ Robustness:
 
 ---
 
-## 📅 Rolling 3-Month Windows
+##  Rolling 3-Month Windows
 
 Service computes **three consecutive month-sized windows** using a half‑open interval **[start, end)** anchored to **today**:
 
@@ -41,7 +41,7 @@ Labels are rendered as: `dd-MM-yyyy to dd-MM-yyyy` and returned **oldest → new
 
 ---
 
-## 🧭 API
+##  API
 
 ### `GET /rewards/{customerId}`
 
@@ -64,7 +64,7 @@ Labels are rendered as: `dd-MM-yyyy to dd-MM-yyyy` and returned **oldest → new
 
 ---
 
-## 🏗️ Project Structure (example)
+##  Project Structure (example)
 
 ```
 RewardServiceApp/
@@ -84,7 +84,13 @@ RewardServiceApp/
   │   └── schema.sql
   ├── src/test/java/com/cg/rewardsystem/
   │   ├── RewardAppApplicationTests.java
-  │   └── service/RewardServiceImplTest.java
+  │   ├── RewardServiceIntegrationTests.java
+  │   ├── controller/RewardControllerTest.java
+  │   ├── entity/TransactionTest.java
+  │   ├── exception/GlobalExceptionHandlerTest.java
+  │   ├── service/RewardServiceImplTest.java
+  │   ├── model/CustomerDataTest.java
+  │   └── util/CalculateRewardsPointsTest.java
   ├── src/test/resources/application-test.properties
   ├── pom.xml
   
@@ -92,7 +98,7 @@ RewardServiceApp/
 
 ---
 
-## ⚙️ Configuration
+##  Configuration
 
 Example `application.properties` (adapt as needed):
 
@@ -124,7 +130,7 @@ spring.h2.console.path=/h2-console
 
 ---
 
-## ▶️ Run & Test
+##  Run & Test
 
 **Build & Run**
 ```bash
@@ -144,7 +150,7 @@ mvn -Dtest=*RewardControllerIT test
 
 ---
 
-## ✅ Testing Strategy
+##  Testing Strategy
 
 - **Unit tests** for `CalculateRewardsPoints` covering:
   - Boundaries: `50`, `100`, `101`
@@ -159,7 +165,7 @@ mvn -Dtest=*RewardControllerIT test
 
 ---
 
-## 🙅 Common Pitfalls
+##  Common Pitfalls
 
 - **H2 console 404**: ensure `spring.h2.console.enabled=true` and check context/servlet path.
 - **Column not found**: align entity `@Column(name=...)` with actual DB columns or set the physical naming strategy (above).
@@ -168,15 +174,10 @@ mvn -Dtest=*RewardControllerIT test
 
 ---
 
-## 🛣️ Roadmap
+##  Roadmap
 
 - Custom date-range queries (start/end as params)
 - Rewards report for all customers
 - Caching for heavy datasets
 - Swagger/OpenAPI annotations
 
----
-
-## 📄 License
-
-MIT (or company-internal). Use as a reference implementation.
