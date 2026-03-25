@@ -1,7 +1,7 @@
 package com.cg.rewardsystem.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.argThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
@@ -31,122 +31,95 @@ import com.cg.rewardsystem.repository.TranscationRepository;
  */
 @ExtendWith(MockitoExtension.class)
 class RewardServiceImplTest {
-
     @Mock
-    private TranscationRepository transcationRepository;
-    // If your service implements an interface IRewardService,
-    // the concrete class is likely in serviceImpl package.
-    @InjectMocks
-    private RewardServiceImpl service;
-    private Long customerId;
-    
-    // Helper record for readability
-    private record Window(LocalDate start, LocalDate end, String label) {}
-    
-    @BeforeEach
-    void setUp() {
-        customerId = 1L;
-    }
+	    private TranscationRepository transcationRepository;
 
-    /** Builds the three rolling windows oldest -> newest anchored to "today" (half-open [start, end)). */
-    private List<Window> rollingWindows(LocalDate today) {
-        List<Window> out = new ArrayList<>(3);
-        for (int i = 3; i >= 1; i--) {
-            LocalDate start = today.minusMonths(i);
-            LocalDate end   = today.minusMonths(i - 1);
-            String label = String.format("%02d-%02d-%04d to %02d-%02d-%04d",
-                    start.getDayOfMonth(), start.getMonthValue(), start.getYear(),
-                    end.getDayOfMonth(),   end.getMonthValue(),   end.getYear());
-            out.add(new Window(start, end, label));
-        }
-        return out;
-    }
+	    @InjectMocks
+	    private RewardServiceImpl service;
 
-    /** Pick a safe date strictly inside the half-open interval [start, end). */
-    private LocalDate inside(Window w) {
-        LocalDate candidate = w.start().plusDays(1);
-        return candidate.isBefore(w.end()) ? candidate : w.start();
-    }
+	    private Long customerId;
 
-    @Test
-    void getRewardByCustomerResponse_returnsChronologicalWindows_andCorrectPointsAndTotal() {
-        // Given: today (anchor). We’ll mirror the service’s window computation.
-        LocalDate today = LocalDate.now();
-        List<Window> windows = rollingWindows(today);
+	    private record Window(LocalDate start, LocalDate end, String label) {}
 
-        // Arrange stubbed transactions for each window:
-        //  - Oldest: amount 49.99 -> truncates to 49 -> 0 points
-        //  - Middle: amount 100.99 -> truncates to 100 -> 50 points
-        //  - Newest: amount 120.00 -> 2*(20) + 50 = 90 points
-        LocalDate w1Date = inside(windows.get(0));
-        LocalDate w2Date = inside(windows.get(1));
-        LocalDate w3Date = inside(windows.get(2));
+	    @BeforeEach
+	    void setUp() {
+	        customerId = 1L;
+	    }
 
-        // Stub repository method: findByCustomerIdAndDateHalfOpen(customerId, start, end)
-        when(transcationRepository.findByCustomerIdAndDateBetween(
-                argThat(id -> id.equals(customerId)),
-                argThat(d -> d.equals(windows.get(0).start())),
-                argThat(d -> d.equals(windows.get(0).end()))
-        )).thenReturn(List.of(new Transaction(10L,customerId,49.99,w1Date )));
+	    /** Produces the same rolling 3-month windows as the updated service. */
+	    private List<Window> rollingWindows(LocalDate today) {
+	        List<Window> out = new ArrayList<>(3);
 
-        when(transcationRepository.findByCustomerIdAndDateBetween(
-                 customerId,
-                windows.get(1).start(),
-                windows.get(1).end())
-        		).thenReturn(List.of(new Transaction(
-                11L, customerId, 100.99, w2Date
-        )));
+	        for (int i = 3; i >= 1; i--) {
+	            LocalDate start = today.minusMonths(i);
+	            LocalDate end   = today.minusMonths(i - 1);
+	            String label = String.format("%02d-%02d-%04d to %02d-%02d-%04d",
+	                    start.getDayOfMonth(), start.getMonthValue(), start.getYear(),
+	                    end.getDayOfMonth(),   end.getMonthValue(),   end.getYear());
+	            out.add(new Window(start, end, label));
+	        }
+	        return out;
+	    }
 
-        when(transcationRepository.findByCustomerIdAndDateBetween(
-                 customerId,
-                windows.get(2).start(),
-                windows.get(2).end()
-        )).thenReturn(List.of(new Transaction(
-                12L, customerId, 120.00, w3Date
-        )));
+	    /** Picks any date INSIDE the half-open interval [start, end). */
+	    private LocalDate inside(Window w) {
+	        LocalDate candidate = w.start().plusDays(1);
+	        return candidate.isBefore(w.end()) ? candidate : w.start();
+	    }
 
-        // When
-        ResponseEntity<CustomerData> response = service.getRewardByCustomerResponse(customerId);
+	    @Test
+	    void getRewardByCustomerResponse_returnsCorrectWindowsAndTotals() {
 
-        // Then
-        assertThat(response).isNotNull();
-        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+	        LocalDate today = LocalDate.now();
+	        List<Window> windows = rollingWindows(today);
 
-        CustomerData body = response.getBody();
-        assertThat(body).isNotNull();
-        assertThat(body.getCustomerId()).isEqualTo(customerId);
+	        // Create example transactions for each month window:
+	        LocalDate w1Date = inside(windows.get(0)); // oldest
+	        LocalDate w2Date = inside(windows.get(1));
+	        LocalDate w3Date = inside(windows.get(2)); // newest
 
-        // Verify month_points ordering (LinkedHashMap preserves insertion order, and we added oldest -> newest)
-        Map<String, Integer> monthPoints = body.getMonth_points();
-        assertThat(monthPoints).isInstanceOf(LinkedHashMap.class);
-        List<String> expectedLabels = windows.stream().map(Window::label).toList();
-        assertThat(monthPoints.keySet()).containsExactlyElementsOf(expectedLabels);
-        // Verify per-window points
-        assertThat(monthPoints.get(expectedLabels.get(0))).isEqualTo(0);   // 49.99 -> 0
-        assertThat(monthPoints.get(expectedLabels.get(1))).isEqualTo(50);  // 100.99 -> 50
-        assertThat(monthPoints.get(expectedLabels.get(2))).isEqualTo(90);  // 120 -> 90
-        // Verify total
-        assertThat(body.getTotal()).isEqualTo(140);
-    }
+	        // 49.99 → 0 points
+	        when(transcationRepository.findByCustomerIdAndDateBetween(customerId,windows.get(0).start(),windows.get(0).end())).thenReturn(List.of(new Transaction(10L, customerId, 49.99, w1Date)));
+	        // 100.99 → 50 points
+	        when(transcationRepository.findByCustomerIdAndDateBetween(customerId, windows.get(1).start(), windows.get(1).end())).thenReturn(List.of(new Transaction(11L, customerId, 100.99, w2Date)));
+	        // 120.00 → 90 points
+	        when(transcationRepository.findByCustomerIdAndDateBetween(customerId,windows.get(2).start(),windows.get(2).end())).thenReturn(List.of(new Transaction(12L, customerId, 120.00, w3Date)));
 
-    @Test
-    void getRewardByCustomerResponse_whenRepositoryThrows_wrapsIntoDataNotFound() {
-        // Given: make repo throw once to test the catch-block path
-        LocalDate today = LocalDate.now();
-        List<Window> windows = rollingWindows(today);
+	        // EXECUTE
+	        ResponseEntity<CustomerData> response = service.getRewardByCustomerResponse(customerId);
 
-        when(transcationRepository.findByCustomerIdAndDateBetween(
-                org.mockito.ArgumentMatchers.eq(customerId),
-                org.mockito.ArgumentMatchers.eq(windows.get(0).start()),
-                org.mockito.ArgumentMatchers.eq(windows.get(0).end())
-        )).thenThrow(new RuntimeException("DB down"));
-        // When / Then
-        try {
-            service.getRewardByCustomerResponse(customerId);
-        } catch (DataNotFoundException ex) {
-            assertThat(ex.getMessage()).contains("Data is not found for mentioned customer id.");
-            return;
-        }
-        throw new AssertionError("Expected DataNotFoundExcepition to be thrown");
-    }
+	        // ASSERT
+	        assertThat(response).isNotNull();
+	        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+
+	        CustomerData data = response.getBody();
+	        assertThat(data).isNotNull();
+	        assertThat(data.getCustomerId()).isEqualTo(customerId);
+	        Map<String, Integer> monthPoints = data.getMonth_points();
+	        assertThat(monthPoints).isInstanceOf(LinkedHashMap.class);
+
+	        List<String> expectedLabels = windows.stream().map(Window::label).toList();
+	      
+	        assertThat(monthPoints.keySet()).containsExactlyElementsOf(expectedLabels);
+
+	        // Per-month points
+	        assertThat(monthPoints.get(expectedLabels.get(0))).isEqualTo(0);   // 49.99
+	        assertThat(monthPoints.get(expectedLabels.get(1))).isEqualTo(50);  // 100.99
+	        assertThat(monthPoints.get(expectedLabels.get(2))).isEqualTo(90);  // 120
+	        // Total = 0 + 50 + 90 = 140
+	        assertThat(data.getTotal()).isEqualTo(140);
+	    }
+
+	    @Test
+	    void getRewardByCustomerResponse_whenRepositoryThrows_wrapsAsDataNotFound() {
+
+	        LocalDate today = LocalDate.now();
+	        List<Window> windows = rollingWindows(today);
+
+	        // Force exception when first period is fetched
+	        when(transcationRepository.findByCustomerIdAndDateBetween(customerId,windows.get(0).start(),windows.get(0).end())).thenThrow(new RuntimeException("DB error"));
+
+	        assertThatThrownBy(() -> service.getRewardByCustomerResponse(customerId)).isInstanceOf(DataNotFoundException.class)
+	                																 .hasMessageContaining("Data is not found for mentioned customer id.");
+	    }
 }
